@@ -45,7 +45,7 @@ static const int maxdim = 4096;
 #define RESULT_SPAN 1
 #define MATCH_BASE(match_coords, qryid) (MatchCoord*)match_coords + qryAddr - (qryid * (min_match_len + 1))
 
-#define GETRCHAR(refpos) getRef(refpos, ref)
+#define GETRCHAR(refpos) _getRef(refpos, ref)
 
 
 
@@ -90,7 +90,7 @@ static const int maxdim = 4096;
 /// getRef
 //////////////////////////////////
 
-char getRef(int refpos, char* ref)
+char _getRef(int refpos, char* ref)
 {
 	return ref[refpos];
 }

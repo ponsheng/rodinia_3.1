@@ -9,7 +9,7 @@ cudagdb=0 #compile for use with cuda-gdb, note that 'dbg' must be 1 as well
 performancetest=1
 
 # NVCC Options
-NVCCFLAGS += -arch sm_20
+NVCCFLAGS += -arch sm_30
 
 # Files
 CFILES := 

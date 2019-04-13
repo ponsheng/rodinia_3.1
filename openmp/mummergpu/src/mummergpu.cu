@@ -465,7 +465,7 @@ void boardMemory(unsigned int * free_mem, unsigned int * total_mem)
   *free_mem =  512*1024*1024;
   *total_mem = 768*1024*1024;
 #else
-  CU_SAFE_CALL_NO_SYNC(cuMemGetInfo(free_mem, total_mem));
+  CU_SAFE_CALL_NO_SYNC(cuMemGetInfo((size_t *)free_mem, (size_t *)total_mem));
 #endif
 }
 

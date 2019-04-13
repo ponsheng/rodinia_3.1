@@ -9,11 +9,13 @@
 #include <queue>
 #include <cstring>
 
+#include <sys/syscall.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <errno.h>
 #include <assert.h>
+#include <unistd.h>
 
 #define ulong4 uint32_t
 #define uint4 uint32_t
