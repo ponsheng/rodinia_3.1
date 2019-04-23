@@ -80,6 +80,14 @@ inline void __cudaCheckError( const char *file, const int line )
 //====================================================================================================100
 //====================================================================================================100
 
+#define TEXTURE_1D_SIZE 131072
+#define CONSTANT_SIZE 65536
+
+
+#ifdef C_TEX
+texture<float, 1, cudaReadModeElementType> c_texture;
+#endif
+
 __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW, float *dE, int *iN, int *iS, int *jW, int *jE, long Nr, float q0sqr, long Nc) {
             long j = blockIdx.x*blockDim.x + threadIdx.x;
             long i = blockIdx.y*blockDim.y + threadIdx.y;
@@ -123,11 +131,17 @@ __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW,
                 // current index
 
                 // diffusion coefficent
+#ifdef C_DEVICE_PIN
+                float cN = tex1Dfetch(c_texture,k);													// north diffusion coefficient
+                float cS = tex1Dfetch(c_texture,iS[i] + Nr*j);										// south diffusion coefficient
+                float cW = tex1Dfetch(c_texture,k);													// west diffusion coefficient
+                float cE = tex1Dfetch(c_texture,i + Nr*jE[j]);										// east diffusion coefficient
+#else
                 float cN = c[k];													// north diffusion coefficient
                 float cS = c[iS[i] + Nr*j];										// south diffusion coefficient
                 float cW = c[k];													// west diffusion coefficient
                 float cE = c[i + Nr*jE[j]];										// east diffusion coefficient
-
+#endif
                 // divergence (equ 58)
                 float D = cN*dN[k] + cS*dS[k] + cW*dW[k] + cE*dE[k];				// divergence
 
@@ -252,8 +266,14 @@ int main(int argc, char *argv []){
 
 	Ne = Nr*Nc;
 
-	image = (fp*)malloc(sizeof(fp) * Ne);
 
+#ifdef IMAGE_PIN
+    CudaSafeCall(cudaMallocHost(&image, sizeof(float) * Ne));
+#elif defined IMAGE_UNI
+    cudaMallocManaged(&image, sizeof(float) * Ne);
+#else
+	image = (fp*)malloc(sizeof(fp) * Ne);
+#endif
 	resize(	image_ori,
 				image_ori_rows,
 				image_ori_cols,
@@ -261,7 +281,6 @@ int main(int argc, char *argv []){
 				Nr,
 				Nc,
 				1);
-
 	time4 = get_time();
 
 	//================================================================================80
@@ -289,8 +308,12 @@ int main(int argc, char *argv []){
     dE = (float*)malloc(sizeof(fp)*Ne) ;											// east direction derivative
 
 	// allocate variable for diffusion coefficient
+#ifdef C_DEVICE_PIN
+    CudaSafeCall(cudaMallocHost(&c, sizeof(float) * Ne));
+#else
     c  = (float*)malloc(sizeof(fp)*Ne) ;											// diffusion coefficient
-        
+#endif
+
     // N/S/W/E indices of surrounding pixels (every element of IMAGE)
 	// #pragma omp parallel
     for (i=0; i<Nr; i++) {
@@ -331,7 +354,11 @@ int main(int argc, char *argv []){
         printf("Ne size: %ld\n", Ne);
         float *image_d, *c_d, *dN_d, *dS_d, *dE_d, *dW_d;
         int *iN_d, *iS_d, *jW_d, *jE_d;
+#ifdef IMAGE_UNI
+        image_d = image;
+#else
         cudaMalloc(&image_d, sizeof(float) * Ne);
+#endif
         cudaMalloc(&c_d, sizeof(float) * Ne);
         cudaMalloc(&dN_d, sizeof(float) * Ne);
         cudaMalloc(&dS_d, sizeof(float) * Ne);
@@ -341,7 +368,15 @@ int main(int argc, char *argv []){
         cudaMalloc(&iS_d, sizeof(int) * Ne);
         cudaMalloc(&jW_d, sizeof(int) * Ne);
         cudaMalloc(&jE_d, sizeof(int) * Ne);
-        
+#ifdef C_TEX
+        if (sizeof(float)*Ne > TEXTURE_1D_SIZE) {
+            fprintf(stderr, "Array 'c' size: %d bigger than texture size %d\n", sizeof(float)*Ne, TEXTURE_1D_SIZE);
+            fprintf(stderr, "Abort\n");
+            return -1;
+        }
+        cudaBindTexture(0, c_texture, c_d, sizeof(float) * Ne);
+#endif
+
         cudaMemcpy(iN_d, iN, Ne*sizeof(int), cudaMemcpyHostToDevice);
         cudaMemcpy(iS_d, iS, Ne*sizeof(int), cudaMemcpyHostToDevice);
         cudaMemcpy(jW_d, jW, Ne*sizeof(int), cudaMemcpyHostToDevice);
@@ -354,8 +389,8 @@ int main(int argc, char *argv []){
         dim3 grid((Nc+31)/32,(Nr+31)/32);
         dim3 block(32, 32);
         printf("X: %d, Y: %d, Z: %d\n", grid.x, grid.y, grid.z); 
-// FIXME
-    for (iter=0; iter<niter; iter++){										// do for the number of iterations input parameter
+    
+        for (iter=0; iter<niter; iter++){										// do for the number of iterations input parameter
 
 		// printf("%d ", iter);
 		// fflush(NULL);
@@ -373,12 +408,14 @@ int main(int argc, char *argv []){
         meanROI = sum / NeROI;												// gets mean (average) value of element in ROI
         varROI  = (sum2 / NeROI) - meanROI*meanROI;							// gets variance of ROI
         q0sqr   = varROI / (meanROI*meanROI);								// gets standard deviation of ROI
-
+#ifndef IMAGE_UNI
         cudaMemcpy(image_d, image, Ne*sizeof(float), cudaMemcpyHostToDevice);
-        
+#endif
         Kernel1<<<grid,block>>>(image_d, c_d, dN_d, dS_d, dW_d, dE_d, iN_d, iS_d, jW_d, jE_d, Nr, q0sqr ,Nc);
         Kernel2<<<grid,block>>>(image_d, c_d, dN_d, dS_d, dW_d, dE_d, iS_d, jE_d, Nr, Nc, lambda);
+#ifndef IMAGE_UNI
         cudaMemcpy(image, image_d, Ne*sizeof(float), cudaMemcpyDeviceToHost);
+#endif
 	}
 
 	// printf("\n");
@@ -414,11 +451,21 @@ int main(int argc, char *argv []){
 	//================================================================================80
 
 	free(image_ori);
-	free(image);
+#ifdef IMAGE_PIN
+    cudaFreeHost(image);
+#elif defined IMAGE_UNI
+    cudaFree(image);
+#else 
+    free(image);
+#endif
 
     free(iN); free(iS); free(jW); free(jE);									// deallocate surrounding pixel memory
     free(dN); free(dS); free(dW); free(dE);									// deallocate directional derivative memory
-    free(c);																// deallocate diffusion coefficient memory
+#ifdef C_DEVICE_PIN
+    cudaFreeHost(c);
+#else
+    free(c);			
+#endif    // deallocate diffusion coefficient memory
 
 	time10 = get_time();
 
