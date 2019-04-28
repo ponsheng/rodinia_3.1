@@ -1,0 +1,1 @@
+nvcc  -w -gencode code=sm_60,arch=compute_60 -Xcompiler -fopenmp main.cu -DIS_CONST   -o bin/sradv1_is_const

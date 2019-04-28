@@ -83,10 +83,35 @@ inline void __cudaCheckError( const char *file, const int line )
 #define TEXTURE_1D_SIZE 131072
 #define CONSTANT_SIZE 65536
 
+#ifdef IS_CONST
+__constant__ float iS_const[CONSTANT_SIZE-100];
+#endif
+
+#ifdef IMAGE_MAP
+#define IMAGE_UNI
+#endif
+
+#ifdef IMAGE_DEF
+#define IMAGE_PIN
+#endif
 
 #ifdef C_TEX
 texture<float, 1, cudaReadModeElementType> c_texture;
 #endif
+
+#ifdef IN_TEX
+texture<int, 1, cudaReadModeElementType> iN_texture;
+#endif
+#ifdef IS_TEX
+texture<int, 1, cudaReadModeElementType> iS_texture;
+#endif
+#ifdef JW_TEX
+texture<int, 1, cudaReadModeElementType> jW_texture;
+#endif
+#ifdef JE_TEX
+texture<int, 1, cudaReadModeElementType> jE_texture;
+#endif
+
 
 __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW, float *dE, int *iN, int *iS, int *jW, int *jE, long Nr, float q0sqr, long Nc) {
             long j = blockIdx.x*blockDim.x + threadIdx.x;
@@ -98,10 +123,26 @@ __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW,
                 long k = i + Nr*j;												// get position of current element
                 float Jc = image[k];													// get value of the current element
                 // directional derivates (every element of IMAGE)
+#ifdef IN_TEX
+                dN[k] = image[tex1Dfetch(iN_texture,i) + Nr*j] - Jc;								// north direction derivative
+#else
                 dN[k] = image[iN[i] + Nr*j] - Jc;								// north direction derivative
+#endif
+#ifdef IS_TEX
+                dS[k] = image[tex1Dfetch(iS_texture,i) + Nr*j] - Jc;								// south direction derivative
+#else
                 dS[k] = image[iS[i] + Nr*j] - Jc;								// south direction derivative
+#endif
+#ifdef JW_TEX
+                dW[k] = image[i + Nr*tex1Dfetch(jW_texture,j)] - Jc;								// west direction derivative
+#else
                 dW[k] = image[i + Nr*jW[j]] - Jc;								// west direction derivative
+#endif
+#ifdef JE_TEX
+                dE[k] = image[i + Nr*tex1Dfetch(jE_texture,j)] - Jc;								// east direction derivative
+#else
                 dE[k] = image[i + Nr*jE[j]] - Jc;								// east direction derivative
+#endif
                 // normalized discrete gradient mag squared (equ 52,53)
                 float G2 = (dN[k]*dN[k] + dS[k]*dS[k]								// gradient (based on derivatives)
                     + dW[k]*dW[k] + dE[k]*dE[k]) / (Jc*Jc);
@@ -129,18 +170,27 @@ __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW,
                 return;
             }
                 // current index
-
+#ifdef IS_TEX
+            int iS_index = tex1Dfetch(iS_texture,i);
+#else
+            int iS_index = iS[i];
+#endif
+#ifdef JE_TEX
+            int jE_index = tex1Dfetch(jE_texture,j);
+#else
+            int jE_index = jE[j];
+#endif
                 // diffusion coefficent
-#ifdef C_DEVICE_PIN
+#ifdef C_TEX
                 float cN = tex1Dfetch(c_texture,k);													// north diffusion coefficient
-                float cS = tex1Dfetch(c_texture,iS[i] + Nr*j);										// south diffusion coefficient
+                float cS = tex1Dfetch(c_texture,iS_index + Nr*j);										// south diffusion coefficient
                 float cW = tex1Dfetch(c_texture,k);													// west diffusion coefficient
-                float cE = tex1Dfetch(c_texture,i + Nr*jE[j]);										// east diffusion coefficient
+                float cE = tex1Dfetch(c_texture,i + Nr*jE_index);										// east diffusion coefficient
 #else
                 float cN = c[k];													// north diffusion coefficient
-                float cS = c[iS[i] + Nr*j];										// south diffusion coefficient
+                float cS = c[iS_index + Nr*j];										// south diffusion coefficient
                 float cW = c[k];													// west diffusion coefficient
-                float cE = c[i + Nr*jE[j]];										// east diffusion coefficient
+                float cE = c[i + Nr*jE_index];										// east diffusion coefficient
 #endif
                 // divergence (equ 58)
                 float D = cN*dN[k] + cS*dS[k] + cW*dW[k] + cE*dE[k];				// divergence
@@ -217,13 +267,15 @@ int main(int argc, char *argv []){
 	// number of threads
 	int threads;
 
+    char *file;
+
 	time1 = get_time();
 
 	//================================================================================80
 	// 	GET INPUT PARAMETERS
 	//================================================================================80
 
-	if(argc != 6){
+	if(argc != 7){
 		printf("ERROR: wrong number of arguments\n");
 		return 0;
 	}
@@ -233,6 +285,7 @@ int main(int argc, char *argv []){
 		Nr = atoi(argv[3]);						// it is 502 in the original image
 		Nc = atoi(argv[4]);						// it is 458 in the original image
 		threads = atoi(argv[5]);
+		file = (argv[6]);
 	}
 
 	omp_set_num_threads(threads);
@@ -252,7 +305,7 @@ int main(int argc, char *argv []){
 
 	image_ori = (fp*)malloc(sizeof(fp) * image_ori_elem);
 
-	read_graphics(	"../../../data/srad/image.pgm",
+	read_graphics(	file,
 								image_ori,
 								image_ori_rows,
 								image_ori_cols,
@@ -266,9 +319,12 @@ int main(int argc, char *argv []){
 
 	Ne = Nr*Nc;
 
-
-#ifdef IMAGE_PIN
+#if defined IMAGE_DEF
+    CudaSafeCall(cudaHostAlloc(&image, sizeof(float) * Ne, cudaHostAllocDefault));
+#elif defined IMAGE_PIN
     CudaSafeCall(cudaMallocHost(&image, sizeof(float) * Ne));
+#elif defined IMAGE_MAP
+    CudaSafeCall(cudaHostAlloc(&image, sizeof(float) * Ne, cudaHostAllocMapped));
 #elif defined IMAGE_UNI
     cudaMallocManaged(&image, sizeof(float) * Ne);
 #else
@@ -371,14 +427,30 @@ int main(int argc, char *argv []){
 #ifdef C_TEX
         if (sizeof(float)*Ne > TEXTURE_1D_SIZE) {
             fprintf(stderr, "Array 'c' size: %d bigger than texture size %d\n", sizeof(float)*Ne, TEXTURE_1D_SIZE);
-            fprintf(stderr, "Abort\n");
-            return -1;
+            //return -1;
         }
-        cudaBindTexture(0, c_texture, c_d, sizeof(float) * Ne);
+        CudaSafeCall(cudaBindTexture(0, c_texture, c_d, sizeof(float) * Ne));
+#endif
+#ifdef IN_TEX
+        CudaSafeCall(cudaBindTexture(0, iN_texture, iN_d, sizeof(int) * Ne));
+#endif
+#ifdef IS_TEX
+        CudaSafeCall(cudaBindTexture(0, iS_texture, iS_d, sizeof(int) * Ne));
+#endif
+
+#ifdef JW_TEX
+        CudaSafeCall(cudaBindTexture(0, jW_texture, jW_d, sizeof(int) * Ne));
+#endif
+#ifdef JE_TEX
+        CudaSafeCall(cudaBindTexture(0, jE_texture, jE_d, sizeof(int) * Ne));
 #endif
 
         cudaMemcpy(iN_d, iN, Ne*sizeof(int), cudaMemcpyHostToDevice);
+#if defined IS_CONST
+        CudaSafeCall(cudaMemcpyToSymbol(iS_const, iS, Ne*sizeof(int)));
+#else
         cudaMemcpy(iS_d, iS, Ne*sizeof(int), cudaMemcpyHostToDevice);
+#endif
         cudaMemcpy(jW_d, jW, Ne*sizeof(int), cudaMemcpyHostToDevice);
         cudaMemcpy(jE_d, jE, Ne*sizeof(int), cudaMemcpyHostToDevice);
         cudaMemcpy(c_d, c, Ne*sizeof(float), cudaMemcpyHostToDevice);
@@ -412,7 +484,9 @@ int main(int argc, char *argv []){
         cudaMemcpy(image_d, image, Ne*sizeof(float), cudaMemcpyHostToDevice);
 #endif
         Kernel1<<<grid,block>>>(image_d, c_d, dN_d, dS_d, dW_d, dE_d, iN_d, iS_d, jW_d, jE_d, Nr, q0sqr ,Nc);
+        CudaCheckError();
         Kernel2<<<grid,block>>>(image_d, c_d, dN_d, dS_d, dW_d, dE_d, iS_d, jE_d, Nr, Nc, lambda);
+        CudaCheckError();
 #ifndef IMAGE_UNI
         cudaMemcpy(image, image_d, Ne*sizeof(float), cudaMemcpyDeviceToHost);
 #endif
@@ -437,7 +511,7 @@ int main(int argc, char *argv []){
 	// 	WRITE IMAGE AFTER PROCESSING
 	//================================================================================80
 
-	write_graphics(	"image_out.pgm",
+	write_graphics(	(char *)"image_out.pgm",
 								image,
 								Nr,
 								Nc,
