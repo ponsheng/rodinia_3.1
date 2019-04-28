@@ -110,7 +110,7 @@ void read_graphics(	char* filename,
 	fid = fopen(filename, "r");
 	if( fid == NULL ){
 		printf( "The file was not opened for reading\n" );
-		return;
+        exit(-1);
 	}
 
 	//================================================================================80
