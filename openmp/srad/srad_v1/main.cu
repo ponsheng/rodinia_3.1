@@ -411,7 +411,11 @@ int main(int argc, char *argv []){
         float *image_d, *c_d, *dN_d, *dS_d, *dE_d, *dW_d;
         int *iN_d, *iS_d, *jW_d, *jE_d;
 #ifdef IMAGE_UNI
+#ifdef IMAGE_MAP
+        cudaHostGetDevicePointer(&image_d, image,0);
+#else
         image_d = image;
+#endif
 #else
         cudaMalloc(&image_d, sizeof(float) * Ne);
 #endif
@@ -489,6 +493,7 @@ int main(int argc, char *argv []){
         CudaCheckError();
 #ifndef IMAGE_UNI
         cudaMemcpy(image, image_d, Ne*sizeof(float), cudaMemcpyDeviceToHost);
+        cudaStreamSynchronize(0);
 #endif
 	}
 
