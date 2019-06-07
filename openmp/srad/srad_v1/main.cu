@@ -81,10 +81,11 @@ inline void __cudaCheckError( const char *file, const int line )
 //====================================================================================================100
 
 #define TEXTURE_1D_SIZE 131072
-#define CONSTANT_SIZE 65536
 
 #ifdef IS_CONST
-__constant__ float iS_const[CONSTANT_SIZE-100];
+__constant__ int iS_const[0x10000/sizeof(int)];
+//#define CONSTANT_SIZE 65536
+
 #endif
 
 #ifdef IMAGE_MAP
@@ -129,7 +130,14 @@ __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW,
                 dN[k] = image[iN[i] + Nr*j] - Jc;								// north direction derivative
 #endif
 #ifdef IS_TEX
-                dS[k] = image[tex1Dfetch(iS_texture,i) + Nr*j] - Jc;								// south direction derivative
+                dS[k] = image[tex1Dfetch(iS_texture,i) + Nr*j] - Jc;
+#elif defined IS_CONST
+                if (i >= 0x10000/sizeof(int)) {
+                    dS[k] = image[iS[i] + Nr*j] - Jc;	
+                } else {
+                    int _i = iS_const[i] + Nr*j;
+                    dS[k] = image[_i] - Jc;	
+                }
 #else
                 dS[k] = image[iS[i] + Nr*j] - Jc;								// south direction derivative
 #endif
@@ -172,6 +180,13 @@ __global__ void Kernel1(float *image, float *c, float *dN, float *dS, float *dW,
                 // current index
 #ifdef IS_TEX
             int iS_index = tex1Dfetch(iS_texture,i);
+#elif defined IS_CONST
+            int iS_index;
+                if (i >= 0x10000/sizeof(int)) {
+                    iS_index = iS[i];
+                } else {
+                    iS_index = iS_const[i];
+                }
 #else
             int iS_index = iS[i];
 #endif
@@ -451,7 +466,12 @@ int main(int argc, char *argv []){
 
         cudaMemcpy(iN_d, iN, Ne*sizeof(int), cudaMemcpyHostToDevice);
 #if defined IS_CONST
-        CudaSafeCall(cudaMemcpyToSymbol(iS_const, iS, Ne*sizeof(int)));
+        if ( Ne*sizeof(int) > 0x10000) {
+            CudaSafeCall(cudaMemcpyToSymbol(iS_const, iS, 0x10000));
+            cudaMemcpy(iS_d, iS, Ne*sizeof(int), cudaMemcpyHostToDevice);
+        } else {
+            CudaSafeCall(cudaMemcpyToSymbol(iS_const, iS, Ne*sizeof(int)));
+        }
 #else
         cudaMemcpy(iS_d, iS, Ne*sizeof(int), cudaMemcpyHostToDevice);
 #endif
