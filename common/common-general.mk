@@ -2,6 +2,13 @@
 CC := gcc
 CXX := g++
 
-CFLAGS := -O2 -w
+COMMONFLAGS = -O2 -w
+
+ifeq ($(dbg), 1)
+	COMMONFLAGS += -g
+endif
+
+
+CFLAGS := $(COMMONFLAGS)
 CC_FLAGS := $(CFLAGS)
-CXXFLAGS := -O2
+CXXFLAGS := $(COMMONFLAGS)

@@ -1,15 +1,17 @@
-
+include ../../common/common-general.mk
 ifdef OUTPUT
 override OUTPUT = -DOUTPUT
 endif
 
+CFLAGS += -fopenmp
+
 # link objects(binaries) together
 heartwall: main.o ./AVI/avilib.o ./AVI/avimod.o
-	gcc main.o ./AVI/avilib.o ./AVI/avimod.o -lm -fopenmp -o heartwall
+	$(CC) $(CFLAGS) main.o ./AVI/avilib.o ./AVI/avimod.o -lm -o heartwall
 
 # compile main function file into object (binary)
 main.o: main.c define.c kernel.c
-	gcc $(OUTPUT) main.c -I./AVI -c -O3 -fopenmp
+	$(CC) $(CFLAGS) $(OUTPUT) main.c -I./AVI -c
 
 ./AVI/avilib.o ./AVI/avimod.o:
 	cd AVI; make;

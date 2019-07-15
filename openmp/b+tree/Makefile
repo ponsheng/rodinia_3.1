@@ -1,6 +1,7 @@
-C_C = gcc
+include ../../common/common-general.mk
+C_C = $(CC)
 OMP_LIB = -lgomp
-OMP_FLAG = -fopenmp
+OMP_FLAG = -fopenmp $(CFLAGS)
 
 # ========================================================================================================================================================================================================200
 #	EXECUTABLES (LINK OBJECTS TOGETHER INTO BINARY)
@@ -33,7 +34,7 @@ main.o:	./common.h \
 	$(C_C)	./main.c \
 			-c \
 			-o ./main.o \
-			-O3
+			$(CFLAGS)
 
 # ======================================================================================================================================================150
 #	KERNELS
@@ -45,7 +46,6 @@ main.o:	./common.h \
 	$(C_C)	./kernel/kernel_cpu.c \
 			-c \
 			-o ./kernel/kernel_cpu.o \
-			-O3 \
 			$(OMP_FLAG)
 
 ./kernel/kernel_cpu_2.o:./common.h \
@@ -54,7 +54,6 @@ main.o:	./common.h \
 	$(C_C)	./kernel/kernel_cpu_2.c \
 			-c \
 			-o ./kernel/kernel_cpu_2.o \
-			-O3 \
 			$(OMP_FLAG)
 
 # ======================================================================================================================================================150
@@ -67,7 +66,7 @@ main.o:	./common.h \
 	$(C_C)	./util/timer/timer.c \
 			-c \
 			-o ./util/timer/timer.o \
-			-O3
+			$(CFLAGS)
 
 ./util/num/num.o:	./common.h \
 					./util/num/num.h \
@@ -75,7 +74,7 @@ main.o:	./common.h \
 	$(C_C)	./util/num/num.c \
 			-c \
 			-o ./util/num/num.o \
-			-O3
+			$(CFLAGS)
 
 # ======================================================================================================================================================150
 #	END
