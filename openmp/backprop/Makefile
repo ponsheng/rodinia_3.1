@@ -1,7 +1,5 @@
-# C compiler
-CC = gcc
-CC_FLAGS = -g -fopenmp  -O2
-
+include ../../common/common-general.mk
+CC_FLAGS += -fopenmp
 
 backprop: backprop.o facetrain.o imagenet.o backprop_kernel.o 
 	$(CC) $(CC_FLAGS) backprop.o facetrain.o imagenet.o backprop_kernel.o -o backprop -lm
@@ -23,4 +21,4 @@ imagenet.o: imagenet.c backprop.h
 
 
 clean:
-	rm -f *.o *~ backprop backprop_cuda.linkinfo
+	rm -f *.o *~ backprop
