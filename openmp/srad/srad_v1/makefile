@@ -21,4 +21,4 @@ main.o: 	main.c \
 
 # delete all object files
 clean:
-	rm *.o srad
+	rm *.o srad image_out.pgm

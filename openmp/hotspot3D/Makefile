@@ -1,5 +1,6 @@
-CC = gcc
-CCFLAGS = -g -fopenmp -O3
+include ../../common/common-general.mk
+
+CCFLAGS += -fopenmp
 OUTPUT = *.out
 
 3D:

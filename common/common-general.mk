@@ -1,6 +1,6 @@
 # This is common makefile config for projects
-CC := gcc
-CXX := g++
+CC := clang 
+CXX := clang++
 
 COMMONFLAGS = -O2 -w
 
@@ -11,4 +11,12 @@ endif
 
 CFLAGS := $(COMMONFLAGS)
 CC_FLAGS := $(CFLAGS)
+CCFLAGS := $(CFLAGS)
 CXXFLAGS := $(COMMONFLAGS)
+
+
+
+# flags for Openmp
+## legacy rodinia command
+OFFLOAD_CC = icc
+OFFLOAD_CC_FLAGS = -offload-option,mic,compiler,"-no-opt-prefetch"
